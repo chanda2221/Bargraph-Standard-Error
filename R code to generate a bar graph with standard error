@@ -1,0 +1,118 @@
+
+# ==========================================
+# Grouped bar graph with standard error
+# ==========================================
+
+# Install packages (run once)
+install.packages(c(
+  "ggplot2", "dplyr", "tidyr", "readr"
+))
+
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(readr)
+
+# 1. Import data
+data <- read_csv("mydata.csv")
+
+# Expected columns:
+# Decade, Treatment, Value, Replicate
+# Treatment: SD1-ZT, SD1-CT, Rain
+
+# 2. Define decade order
+decade_order <- as.vector(
+  outer(
+    c("Sep", "Oct", "Nov",
+      "Dec", "Jan", "Feb", "Mar"),
+    paste0("d", 1:3),
+    paste,
+    sep = "-"
+  )
+)
+
+data$Decade <- factor(
+  data$Decade,
+  levels = decade_order
+)
+
+# 3. Calculate mean and standard error
+summary_data <- data %>%
+  group_by(Decade, Treatment) %>%
+  summarise(
+    n = sum(!is.na(Value)),
+    Mean = mean(Value, na.rm = TRUE),
+    SD = sd(Value, na.rm = TRUE),
+    SE = SD / sqrt(n),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    SE = ifelse(n > 1, SE, NA_real_)
+  )
+
+# 4. Create graph
+p <- ggplot(
+  summary_data,
+  aes(x = Decade, y = Mean, fill = Treatment)
+) +
+  geom_col(
+    position = position_dodge(width = 0.8),
+    width = 0.7
+  ) +
+  geom_errorbar(
+    data = subset(summary_data, Treatment != "Rain"),
+    aes(
+      ymin = Mean - SE,
+      ymax = Mean + SE
+    ),
+    position = position_dodge(width = 0.8),
+    width = 0.2,
+    linewidth = 0.5,
+    na.rm = TRUE
+  ) +
+  scale_fill_manual(
+    values = c(
+      "SD1-ZT" = "#4472C4",
+      "SD1-CT" = "#C0504D",
+      "Rain" = "#9BBB59"
+    )
+  ) +
+  labs(
+    x = "Decades",
+    y = "SWC & Decadal Rainfall (mm)",
+    fill = NULL
+  ) +
+  theme_classic(base_size = 14) +
+  theme(
+    axis.text.x = element_text(
+      angle = 65,
+      hjust = 1,
+      vjust = 1
+    ),
+    axis.title = element_text(face = "bold"),
+    legend.position = "right",
+    panel.grid.major.y = element_line(
+      color = "grey85"
+    )
+  )
+
+print(p)
+
+# 5. Save publication-quality figures
+ggsave(
+  "Bargraph_with_SE.png",
+  plot = p,
+  width = 12,
+  height = 6,
+  dpi = 300
+)
+
+ggsave(
+  "Bargraph_with_SE.pdf",
+  plot = p,
+  width = 12,
+  height = 6
+)
+
+# 6. Export summary statistics
+write_csv(summary_data, "Summary_with_SE.csv")
